@@ -1,0 +1,10 @@
+name = "my-construction-2026-mvp"
+compatibility_date = "2024-04-03"
+compatibility_flags = ["nodejs_compat"]
+
+[site]
+bucket = ".vercel/output/static"
+
+[env.production.vars]
+# Production environment variables
+# NEXT_PUBLIC_SUPABASE_URL = "your-url"
