@@ -91,7 +91,7 @@ export const exhibitionsData: Exhibition[] = [
         country: '중국',
         startDate: '2026-05-08',
         endDate: '2026-05-10',
-        description: '★★★★☆ [상반기 확정] CIHIE (주택산업전) + WCME 2026 (세계 콘크리트 박람회) 동시 개최. 골조 및 콘크리트 분야 집중 공략',
+        description: '★★★★☆ [상반기 확정] CIHIE (주택산업전) + WCME 2026 (세계 콘크리트 박람회) 동시 개최. 골조 및 콘크리트 분야 집중 공략 (최신 업데이트됨)',
         website: 'http://www.cihie.net',
         secondaryWebsite: 'http://ykhw.gihaexpo.com/',
         secondaryWebsiteLabel: 'WCME 2026 방문',
