@@ -75,9 +75,6 @@ export default function Exhibitions() {
                         <p className="text-xl text-gray-600">
                             2026년 스마트건설 & AI 로봇 박람회 일정
                         </p>
-                        <p className="text-xs text-gray-400 mt-2">
-                            Deploy Version: 0.1.4-v2 (Priority Fixed)
-                        </p>
                     </div>
                 </section>
 
