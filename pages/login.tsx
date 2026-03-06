@@ -112,7 +112,7 @@ export default function Login() {
                         {/* 보안 안내 */}
                         <div className="mt-6 text-center">
                             <p className="text-xs text-gray-400">
-                                🔒 보안 시스템: 13명의 인가된 사용자만 접근 가능
+                                🔒 보안 시스템: 15명의 인가된 사용자만 접근 가능
                             </p>
                         </div>
                     </div>
