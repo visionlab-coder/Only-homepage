@@ -139,8 +139,8 @@ export default function TFActivities() {
                             <div key={activity.id} className="mb-20 relative">
                                 {/* Dot with Pulse Effect if Milestone */}
                                 <div className={`absolute left-[-11px] md:left-[-9px] top-0 w-5 h-5 rounded-full border-4 bg-white z-10 transition-all duration-500 ${activity.isMilestone
-                                        ? 'border-blue-600 scale-125 shadow-[0_0_15px_rgba(37,99,235,0.5)] bg-blue-50'
-                                        : 'border-gray-200'
+                                    ? 'border-blue-600 scale-125 shadow-[0_0_15px_rgba(37,99,235,0.5)] bg-blue-50'
+                                    : 'border-gray-200'
                                     }`}>
                                     {activity.isMilestone && (
                                         <div className="absolute inset-0 rounded-full animate-ping bg-blue-400/30"></div>
@@ -344,20 +344,50 @@ export default function TFActivities() {
                                 </div>
                             </div>
 
-                            {/* Image Attachment (Placeholder for User) */}
-                            <div className="p-6 border-2 border-dashed border-gray-100 rounded-[2rem] bg-gray-50/50 text-center group hover:border-blue-200 hover:bg-blue-50/10 transition-all">
-                                <div className="text-3xl mb-3 grayscale group-hover:grayscale-0 transition-all">📸</div>
-                                <p className="text-xs font-black text-gray-400 uppercase tracking-tighter mb-1">사진 첨부를 준비중입니다</p>
-                                <p className="text-[10px] text-gray-400 leading-tight">사용자가 직접 촬영한 프리미엄 현장 사진을<br />이곳에 드래그하여 업로드할 수 있습니다.</p>
-
-                                {/* URL Input fallback for MVP testing */}
-                                <input
-                                    className="mt-4 w-full text-[10px] p-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                    placeholder="테스트용 이미지 URL 입력 (Optional)"
-                                    onChange={(e) => {
-                                        if (e.target.value) setCurrentActivity({ ...currentActivity, images: [e.target.value] });
-                                    }}
-                                />
+                            {/* Real Image Upload Implementation */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">활동 사진 (Images)</label>
+                                <div className="grid grid-cols-3 gap-3 mb-4">
+                                    {currentActivity.images?.map((img, idx) => (
+                                        <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-gray-100 group">
+                                            <img src={img} alt="preview" className="w-full h-full object-cover" />
+                                            <button
+                                                onClick={() => {
+                                                    const newImages = [...(currentActivity.images || [])];
+                                                    newImages.splice(idx, 1);
+                                                    setCurrentActivity({ ...currentActivity, images: newImages });
+                                                }}
+                                                className="absolute top-1 right-1 bg-black/50 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-2xl bg-gray-50 hover:bg-white hover:border-blue-200 transition-all cursor-pointer group">
+                                        <div className="text-xl mb-1 grayscale group-hover:grayscale-0">📸</div>
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">사진 추가</span>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            multiple
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const files = Array.from(e.target.files || []);
+                                                files.forEach(file => {
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => {
+                                                        const result = reader.result as string;
+                                                        setCurrentActivity(prev => ({
+                                                            ...prev,
+                                                            images: [...(prev.images || []), result]
+                                                        }));
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                });
+                                            }}
+                                        />
+                                    </label>
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-4 py-2 px-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
