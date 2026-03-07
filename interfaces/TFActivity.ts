@@ -2,11 +2,12 @@ export interface TFActivity {
     id: string;
     date: string;
     dayOfWeek: string;
-    category: '현장출장' | '회의 및 업무 협의' | '미래전략TF 기획' | '기타 업무';
+    category: string;
     title: string;
     details?: string;
     summary?: string;
     location?: string;
+    status: '예정' | '완료';
     isMilestone?: boolean;
     images?: string[];
     participants?: string[];

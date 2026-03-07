@@ -106,7 +106,7 @@ export default function Home() {
                     </div>
                 </section>
 
-                {/* 미래전략TF 활동 기록 섹션 추가 */}
+                {/* 미래전략TF 마일스톤 섹션 추가 */}
                 <section className="py-16 md:py-32">
                     <div className="container-minimal bg-gray-50 rounded-[2rem] md:rounded-[4rem] p-8 md:p-20 overflow-hidden relative group">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-10 relative z-10">
@@ -122,7 +122,7 @@ export default function Home() {
                                     미래를 향한 TF의 모든 발자취를 투명하게 공유합니다.
                                 </p>
                                 <Link href="/tf-activities" className="inline-flex items-center gap-2 bg-black text-white px-8 py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all group-hover:scale-105 duration-300 shadow-xl">
-                                    활동 기록 전체보기
+                                    마일스톤 전체보기
                                     <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                                     </svg>

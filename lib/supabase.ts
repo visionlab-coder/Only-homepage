@@ -171,7 +171,7 @@ export const uploadFile = async (file: File) => {
 // --- 전략 계획 관련 함수 ---
 export interface StrategicPlanData {
     id?: string;
-    type: 'agenda' | 'plan' | 'execution' | 'approval' | 'departments';
+    type: 'agenda' | 'plan' | 'execution' | 'approval' | 'departments' | 'activities';
     data: any;
     updated_at?: string;
     updated_by?: string;

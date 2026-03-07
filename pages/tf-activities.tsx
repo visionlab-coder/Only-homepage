@@ -3,36 +3,57 @@ import Head from 'next/head';
 import { tfActivities as initialActivities } from '../data/tfActivities';
 import { useDeviceMode } from '../contexts/DeviceModeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { uploadFile, fetchStrategicPlan, saveStrategicPlan } from '../lib/supabase';
 import { TFActivity } from '../interfaces/TFActivity';
 
 export default function TFActivities() {
     const { isMobileMode } = useDeviceMode();
     const { user, isAuthenticated } = useAuth();
-    // 테스트 및 MVP 단계에서는 gsenc, psml도 관리가 가능하도록 허용
-    const isObserver = isAuthenticated
-        ? (user?.role === 'observer' && user?.username !== 'gsenc' && user?.username !== 'psml')
-        : true;
+    const isAdmin = isAuthenticated && (user?.role === 'leader' || user?.role === 'ceo' || user?.role === 'executive');
+    const isMember = isAuthenticated && (user?.role === 'member' || user?.role === 'executive');
+    const isObserver = !isAuthenticated || user?.role === 'observer';
 
     const [activities, setActivities] = useState<TFActivity[]>(initialActivities);
     const [isEditing, setIsEditing] = useState(false);
     const [currentActivity, setCurrentActivity] = useState<Partial<TFActivity>>({});
     const [isExpanded, setIsExpanded] = useState(false);
+    const [filterStatus, setFilterStatus] = useState<'전체' | '예정' | '완료'>('전체');
+    const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
 
-    // 로컬 스토리지에서 데이터 불러오기
+    const toggleDetails = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpandedDetails(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    // Supabase 및 로컬 스토리지에서 데이터 불러오기
     useEffect(() => {
-        const saved = localStorage.getItem('tf-activities');
-        if (saved) {
-            try {
-                setActivities(JSON.parse(saved));
-            } catch (e) {
-                console.error('Failed to parse activities', e);
+        const loadData = async () => {
+            const remoteData = await fetchStrategicPlan('activities');
+            if (remoteData?.data && Array.isArray(remoteData.data)) {
+                setActivities(remoteData.data);
+            } else {
+                const saved = localStorage.getItem('tf-activities');
+                if (saved) {
+                    try {
+                        setActivities(JSON.parse(saved));
+                    } catch (e) {
+                        console.error('Failed to parse activities', e);
+                    }
+                }
             }
-        }
+        };
+        loadData();
     }, []);
 
-    // 데이터 저장 시 로컬 스토리지 업데이트
-    const saveToLocalStorage = (data: TFActivity[]) => {
+    // 데이터 저장 시 서버 및 로컬 동기화
+    const syncActivities = async (data: TFActivity[]) => {
+        setActivities(data);
         localStorage.setItem('tf-activities', JSON.stringify(data));
+        await saveStrategicPlan({
+            type: 'activities',
+            data: data,
+            updated_by: user?.username || 'unknown'
+        });
     };
 
     const handleAdd = () => {
@@ -42,10 +63,11 @@ export default function TFActivities() {
             id: String(Date.now()),
             date: today,
             dayOfWeek: dayOfWeek,
-            category: '현장출장',
+            category: '[일반 업무]',
             title: '',
             summary: '',
             details: '',
+            status: '예정',
             isMilestone: false,
             images: [],
             participants: []
@@ -58,15 +80,37 @@ export default function TFActivities() {
         setIsEditing(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('정말로 이 활동 기록을 삭제하시겠습니까?')) {
+    const handleDelete = async (id: string) => {
+        if (confirm('정말로 이 마일스톤을 삭제하시겠습니까?')) {
             const updated = activities.filter(a => a.id !== id);
-            setActivities(updated);
-            saveToLocalStorage(updated);
+            await syncActivities(updated);
         }
     };
 
-    const handleSave = () => {
+    const handleClearAll = async () => {
+        console.log('초기화 버튼 클릭됨');
+        if (typeof window !== 'undefined' && window.confirm('마일스톤을 초기화 하겠습니까?')) {
+            try {
+                // localStorage의 관련 키를 모두 삭제 (구데이터 복원 방지)
+                localStorage.removeItem('tf-activities');
+                localStorage.removeItem('strategic_plan_activities');
+
+                // UI 즉시 반영 (혹시 모를 지연 방지)
+                setActivities([...initialActivities]);
+
+                // 서버 동기화 시도 (실패해도 초기화는 진행되도록)
+                await syncActivities(initialActivities).catch(err => console.error('Sync failed:', err));
+
+                alert('초기화가 완료되었습니다.');
+                window.location.reload();
+            } catch (error) {
+                console.error('Clear All Error:', error);
+                alert('초기화 중 오류가 발생했습니다. 다시 시도해주세요.');
+            }
+        }
+    };
+
+    const handleSave = async () => {
         if (!currentActivity.title || !currentActivity.date) {
             alert('날짜와 제목은 필수 입력 사항입니다.');
             return;
@@ -79,13 +123,14 @@ export default function TFActivities() {
             updated = [...activities, currentActivity as TFActivity];
         }
 
-        setActivities(updated);
-        saveToLocalStorage(updated);
+        await syncActivities(updated);
         setIsEditing(false);
     };
 
     // 활동 날짜순 내림차순 정렬 (최신순)
-    const sortedActivities = [...activities].sort((a, b) => b.date.localeCompare(a.date));
+    // 활동 날짜순 내림차순 정렬 (최신순)
+    const filteredActivities = activities.filter(a => filterStatus === '전체' || a.status === filterStatus);
+    const sortedActivities = [...filteredActivities].sort((a, b) => b.date.localeCompare(a.date));
 
     // 표시할 활동 (기본 5개, 펼칠 시 전체)
     const displayActivities = isExpanded ? sortedActivities : sortedActivities.slice(0, 5);
@@ -93,7 +138,7 @@ export default function TFActivities() {
     return (
         <div className="bg-white min-h-screen">
             <Head>
-                <title>미래전략TF 활동기록 | 서원토건</title>
+                <title>미래전략TF 마일스톤 | 서원토건</title>
             </Head>
 
             {/* Header */}
@@ -103,19 +148,45 @@ export default function TFActivities() {
                         Activity Log & Performance
                     </span>
                     <h1 className="text-3xl md:text-5xl font-bold text-black mb-6">
-                        미래전략TF 활동 기록
+                        미래전략TF 마일스톤
                     </h1>
                     <p className="text-gray-500 max-w-2xl mx-auto text-sm md:text-base leading-relaxed mb-8">
                         실질적인 성과 창출과 미래 비전 공유를 위해 TF팀의 모든 발자취를 투명하게 기록합니다.
                     </p>
-                    {!isObserver && (
-                        <button
-                            onClick={handleAdd}
-                            className="bg-black text-white px-8 py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all text-sm shadow-lg hover:scale-105 active:scale-95"
-                        >
-                            + 새 활동 기록하기
-                        </button>
+                    {isAuthenticated && !isObserver && (
+                        <div className="flex gap-4 justify-center">
+                            {isAdmin && (
+                                <button
+                                    onClick={handleClearAll}
+                                    className="bg-red-50 text-red-600 px-6 py-4 rounded-2xl font-bold hover:bg-red-100 transition-all text-sm shadow-sm"
+                                >
+                                    전체 마일스톤 초기화
+                                </button>
+                            )}
+                            <button
+                                onClick={handleAdd}
+                                className="bg-black text-white px-8 py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all text-sm shadow-lg hover:scale-105 active:scale-95"
+                            >
+                                + 새 마일스톤 기록하기
+                            </button>
+                        </div>
                     )}
+
+                    {/* Status Filter */}
+                    <div className="flex justify-center gap-2 mt-8">
+                        {['전체', '예정', '완료'].map((status) => (
+                            <button
+                                key={status}
+                                onClick={() => setFilterStatus(status as any)}
+                                className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${filterStatus === status
+                                    ? 'bg-black text-white shadow-md'
+                                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                                    }`}
+                            >
+                                {status}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </section>
 
@@ -137,7 +208,12 @@ export default function TFActivities() {
                             {/* Content Box */}
                             <div className="flex flex-col md:flex-row md:items-start gap-6">
                                 {/* Date Column */}
+                                {/* Date Column */}
                                 <div className="md:w-32 shrink-0">
+                                    <div className={`inline-block px-2 py-1 mb-2 rounded-md text-[10px] font-black uppercase tracking-widest ${activity.status === '완료' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                        }`}>
+                                        {activity.status || '미정'}
+                                    </div>
                                     <div className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{activity.category}</div>
                                     <div className="text-lg font-bold text-black">{activity.date}</div>
                                     <div className="text-[11px] font-medium text-gray-400 uppercase">{activity.dayOfWeek}</div>
@@ -155,7 +231,7 @@ export default function TFActivities() {
                                         )}
 
                                         {/* Edit/Delete Actions */}
-                                        {!isObserver && (
+                                        {isAdmin && (
                                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
                                                 <button
                                                     onClick={() => handleEdit(activity)}
@@ -191,16 +267,33 @@ export default function TFActivities() {
 
                                         <div className="flex flex-col xl:flex-row gap-8">
                                             <div className="flex-1">
-                                                {activity.details && (
-                                                    <ul className="space-y-2.5 mb-6">
-                                                        {activity.details.split('\n').map((line, i) => (
-                                                            <li key={i} className="text-[13px] text-gray-500 leading-relaxed flex items-start gap-2.5">
-                                                                <span className="shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-2"></span>
-                                                                {line}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                )}
+                                                {activity.details && (() => {
+                                                    const lines = activity.details.split('\n');
+                                                    const isLong = lines.length > 5;
+                                                    const isDetailExpanded = expandedDetails[activity.id];
+                                                    const displayLines = isLong && !isDetailExpanded ? lines.slice(0, 5) : lines;
+
+                                                    return (
+                                                        <div className="mb-6">
+                                                            <ul className="space-y-2.5">
+                                                                {displayLines.map((line, i) => (
+                                                                    <li key={i} className="text-[13px] text-gray-500 leading-relaxed flex items-start gap-2.5">
+                                                                        <span className="shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-2"></span>
+                                                                        {line}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                            {isLong && (
+                                                                <button
+                                                                    onClick={(e) => toggleDetails(activity.id, e)}
+                                                                    className="mt-3 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
+                                                                >
+                                                                    {isDetailExpanded ? '▲ 간략히 보기' : `▼ ${lines.length - 5}줄 더보기`}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 <div className="flex flex-wrap items-center gap-5">
                                                     {activity.location && (
@@ -257,14 +350,14 @@ export default function TFActivities() {
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                                     </svg>
-                                    과거 기록 접기
+                                    과거 마일스톤 접기
                                 </>
                             ) : (
                                 <>
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
-                                    과거 기록 더보기 ({sortedActivities.length - 5}건)
+                                    과거 마일스톤 더보기 ({sortedActivities.length - 5}건)
                                 </>
                             )}
                         </button>
@@ -277,7 +370,7 @@ export default function TFActivities() {
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                     <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
-                            <h2 className="text-xl font-bold text-black">활동 기록 편집</h2>
+                            <h2 className="text-xl font-bold text-black">마일스톤 편집</h2>
                             <button onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-black">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -297,22 +390,33 @@ export default function TFActivities() {
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">카테고리</label>
+                                    <input
+                                        type="text"
+                                        value={currentActivity.category || ''}
+                                        onChange={(e) => setCurrentActivity({ ...currentActivity, category: e.target.value })}
+                                        className="w-full px-5 py-4 border border-gray-100 bg-gray-50 rounded-[1.25rem] focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition-all font-bold text-sm"
+                                        placeholder="예: [성균관대 사전컨택]"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">진행 상태 (Status)</label>
                                     <select
-                                        value={currentActivity.category}
-                                        onChange={(e) => setCurrentActivity({ ...currentActivity, category: e.target.value as any })}
+                                        value={currentActivity.status || '예정'}
+                                        onChange={(e) => setCurrentActivity({ ...currentActivity, status: e.target.value as any })}
                                         className="w-full px-5 py-4 border border-gray-100 bg-gray-50 rounded-[1.25rem] focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition-all font-bold text-sm appearance-none cursor-pointer"
                                         style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'right 1rem center', backgroundSize: '1.2em 1.2em', backgroundRepeat: 'no-repeat' }}
                                     >
-                                        <option value="현장출장">현장출장</option>
-                                        <option value="회의 및 업무 협의">회의 및 업무 협의</option>
-                                        <option value="미래전략TF 기획">미래전략TF 기획</option>
-                                        <option value="기타 업무">기타 업무</option>
+                                        <option value="예정">예정</option>
+                                        <option value="완료">완료</option>
                                     </select>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">활동 제목 (Core Title)</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">마일스톤 제목 (Core Title)</label>
                                 <input
                                     type="text"
                                     value={currentActivity.title || ''}
@@ -368,7 +472,7 @@ export default function TFActivities() {
 
                             {/* Real Image Upload Implementation */}
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">활동 사진 관리 (Images)</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">연관 사진 관리 (Images)</label>
                                 <div className="grid grid-cols-3 gap-4 mb-4">
                                     {currentActivity.images?.map((img, idx) => (
                                         <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-gray-100 group shadow-sm bg-gray-50">
@@ -404,19 +508,24 @@ export default function TFActivities() {
                                             accept="image/*"
                                             multiple
                                             className="hidden"
-                                            onChange={(e) => {
+                                            onChange={async (e) => {
                                                 const files = Array.from(e.target.files || []);
-                                                files.forEach(file => {
-                                                    const reader = new FileReader();
-                                                    reader.onloadend = () => {
-                                                        const result = reader.result as string;
-                                                        setCurrentActivity(prev => ({
-                                                            ...prev,
-                                                            images: [...(prev.images || []), result]
-                                                        }));
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                });
+                                                if (files.length === 0) return;
+
+                                                try {
+                                                    const newUrls: string[] = [];
+                                                    for (const file of files) {
+                                                        const url = await uploadFile(file);
+                                                        if (url) newUrls.push(url);
+                                                    }
+                                                    setCurrentActivity(prev => ({
+                                                        ...prev,
+                                                        images: [...(prev.images || []), ...newUrls]
+                                                    }));
+                                                } catch (err) {
+                                                    console.error('Image upload failed:', err);
+                                                    alert('이미지 업로드에 실패했습니다.');
+                                                }
                                             }}
                                         />
                                     </label>
